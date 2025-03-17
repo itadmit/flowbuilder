@@ -26,4 +26,3 @@ function sendJsonResponse($data) {
     echo json_encode($data);
     exit;
 }
-?>

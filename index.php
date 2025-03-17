@@ -59,6 +59,10 @@ if ($dbCheckNeeded) {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+
+        #root{
+            width:100%
+        }
     </style>
 </head>
 <body>
@@ -82,6 +86,6 @@ if ($dbCheckNeeded) {
             }, 500);
         });
     </script>
-<script src="direct-connections.js"></script>
+
 </body>
 </html>

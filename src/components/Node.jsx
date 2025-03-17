@@ -1,5 +1,5 @@
-// components/Node.jsx - תיקון התנהגות המחברים
-import React, { useRef, useEffect, useCallback, useState } from 'react';
+// components/Node.jsx - Revised with better connection support
+import React, { useRef, useEffect } from 'react';
 
 const Node = ({ 
   node, 
@@ -13,9 +13,7 @@ const Node = ({
 }) => {
   const nodeRef = useRef(null);
   const dragData = useRef({ isDragging: false, startX: 0, startY: 0, initialX: 0, initialY: 0 });
-  const [connectorActive, setConnectorActive] = useState(false);
 
-  // Position the node whenever its coordinates or scale changes
   useEffect(() => {
     const nodeElement = nodeRef.current;
     if (!nodeElement) return;
@@ -23,12 +21,26 @@ const Node = ({
     // Position the node
     nodeElement.style.left = `${node.x * scale}px`;
     nodeElement.style.top = `${node.y * scale}px`;
+    // We use transform-origin to ensure scaling happens from the top-left corner
+    nodeElement.style.transformOrigin = '0 0';
     nodeElement.style.transform = `scale(${scale})`;
     nodeElement.setAttribute('data-x', node.x);
     nodeElement.setAttribute('data-y', node.y);
   }, [node.x, node.y, scale]);
 
-  const handleMouseDown = useCallback((e) => {
+  // Emit a custom event when a node is moved to trigger connection redrawing
+  useEffect(() => {
+    const nodeMovedEvent = new CustomEvent('node-moved', {
+      detail: { nodeId: node.id, x: node.x, y: node.y }
+    });
+    
+    // Dispatch the event on the document
+    if (node.x && node.y) {
+      document.dispatchEvent(nodeMovedEvent);
+    }
+  }, [node.id, node.x, node.y]);
+
+  const handleMouseDown = (e) => {
     // Don't start drag if clicking on a button or connector
     if (e.target.closest('.node-btn') || e.target.closest('.connector')) {
       return;
@@ -40,8 +52,6 @@ const Node = ({
     // Only start dragging if clicking on the header
     if (e.target.closest('.node-header')) {
       const nodeElement = nodeRef.current;
-      if (!nodeElement) return;
-      
       const initialX = e.clientX;
       const initialY = e.clientY;
       const startX = parseFloat(nodeElement.style.left) || 0;
@@ -58,9 +68,9 @@ const Node = ({
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
     }
-  }, [node.id, setActiveNode]);
+  };
 
-  const handleMouseMove = useCallback((e) => {
+  const handleMouseMove = (e) => {
     if (!dragData.current.isDragging) return;
 
     const dx = (e.clientX - dragData.current.initialX) / scale;
@@ -70,62 +80,46 @@ const Node = ({
     const newY = dragData.current.startY + dy;
 
     const nodeElement = nodeRef.current;
-    if (!nodeElement) return;
-    
     nodeElement.style.left = `${newX}px`;
     nodeElement.style.top = `${newY}px`;
-    nodeElement.setAttribute('data-x', newX);
-    nodeElement.setAttribute('data-y', newY);
-  }, [scale]);
+    nodeElement.setAttribute('data-x', newX / scale);
+    nodeElement.setAttribute('data-y', newY / scale);
+  };
 
-  const handleMouseUp = useCallback(() => {
+  const handleMouseUp = (e) => {
     if (!dragData.current.isDragging) return;
 
     document.removeEventListener('mousemove', handleMouseMove);
     document.removeEventListener('mouseup', handleMouseUp);
 
-    // Update the node position in state
     const nodeElement = nodeRef.current;
-    if (!nodeElement) return;
-    
     const newX = parseFloat(nodeElement.getAttribute('data-x'));
     const newY = parseFloat(nodeElement.getAttribute('data-y'));
 
-    // This would be handled by the parent component
-    // updateNodePosition(node.id, newX, newY);
+    // Dispatch a custom event to notify parent that we need to redraw connections
+    const updateEvent = new CustomEvent('node-moved', { 
+      detail: { nodeId: node.id, x: newX, y: newY } 
+    });
+    document.dispatchEvent(updateEvent);
 
     dragData.current.isDragging = false;
-  }, [handleMouseMove]);
+  };
 
-  const handleEditClick = useCallback((e) => {
+  const handleEditClick = (e) => {
     e.stopPropagation();
     openNodeEdit(node.id);
-  }, [node.id, openNodeEdit]);
+  };
 
-  const handleDeleteClick = useCallback((e) => {
+  const handleDeleteClick = (e) => {
     e.stopPropagation();
     deleteNode(node.id);
-  }, [node.id, deleteNode]);
+  };
 
-  // עדכון של מאזין המחברים
-  const handleConnectorMouseDown = useCallback((e, index) => {
-    e.preventDefault();
+  const handleConnectorMouseDown = (e, index) => {
     e.stopPropagation();
-    
-    console.log('לחיצה על מחבר:', index, 'של נוד:', node.id);
-    setConnectorActive(true);
-    
-    // קריאה לפונקצית התחלת גרירת חיבור
+    e.preventDefault();
     startDragConnection(e, node.id, index);
-    
-    // הוספת מאזין לסיום הגרירה
-    const handleGlobalMouseUp = () => {
-      setConnectorActive(false);
-      document.removeEventListener('mouseup', handleGlobalMouseUp);
-    };
-    
-    document.addEventListener('mouseup', handleGlobalMouseUp);
-  }, [node.id, startDragConnection]);
+  };
 
   const renderNodeContent = () => {
     let content = (
@@ -171,7 +165,7 @@ const Node = ({
           {node.options.map((_, index) => (
             <span 
               key={index}
-              className={`connector ${connectorActive ? 'connector-active' : ''}`}
+              className="connector" 
               data-index={index} 
               title={`חיבור לאפשרות ${index + 1}`}
               onMouseDown={(e) => handleConnectorMouseDown(e, index)}
@@ -182,7 +176,7 @@ const Node = ({
     } else if (node.type !== 'delay' || (node.type === 'delay' && node.delay && node.delay.type === 'timeout')) {
       return (
         <span 
-          className={`connector ${connectorActive ? 'connector-active' : ''}`}
+          className="connector" 
           data-index={0} 
           title="חיבור להמשך"
           onMouseDown={(e) => handleConnectorMouseDown(e, 0)}
@@ -198,9 +192,13 @@ const Node = ({
       ref={nodeRef}
       className={`node ${node.type} ${isActive ? 'active' : ''}`}
       style={{ 
-        left: `${node.x}px`, 
-        top: `${node.y}px`,
-        transform: `scale(${scale})`
+        position: 'absolute',
+        left: `${node.x * scale}px`, 
+        top: `${node.y * scale}px`,
+        transformOrigin: '0 0',
+        transform: `scale(${scale})`,
+        zIndex: isActive ? 20 : 10, // Ensure active nodes are above others
+        width: '300px' // Ensure width is explicitly set
       }}
       onMouseDown={handleMouseDown}
     >
@@ -230,11 +228,11 @@ const Node = ({
       <div className="node-content">
         {renderNodeContent()}
       </div>
-      <div className="node-footer">
+      <div className="node-footer" style={{ display: 'flex', justifyContent: 'center', margin: '10px 0' }}>
         {renderConnectors()}
       </div>
     </div>
   );
 };
 
-export default React.memo(Node);
+export default Node;

@@ -1,4 +1,3 @@
-// components/modals/ConnectModal.jsx
 import React, { useState, useEffect } from 'react';
 
 const ConnectModal = ({ onConnect, onClose }) => {

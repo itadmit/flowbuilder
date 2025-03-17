@@ -1,7 +1,6 @@
-// components/modals/NodeEditModal.jsx
 import React, { useState, useEffect } from 'react';
 
-const NodeEditModal = ({ node, onSave, onClose }) => {
+const NodeEditModal = ({ node, onSave, onClose, onDelete }) => {
   const [name, setName] = useState('');
   const [message, setMessage] = useState('');
   const [options, setOptions] = useState([]);
@@ -11,44 +10,49 @@ const NodeEditModal = ({ node, onSave, onClose }) => {
   // Initialize form with node data
   useEffect(() => {
     if (node) {
-      setName(node.name || '');
-      setMessage(node.message || '');
-      setOptions(node.options || ['']);
+      setName(node.data.name || '');
+      setMessage(node.data.message || '');
       
-      if (node.type === 'delay' && node.delay) {
-        setDelayType(node.delay.type || 'wait');
-        setDelaySeconds(node.delay.seconds || 5);
+      if (node.data.options) {
+        setOptions(node.data.options);
+      } else {
+        setOptions(['']);
+      }
+      
+      if (node.data.delay) {
+        setDelayType(node.data.delay.type || 'wait');
+        setDelaySeconds(node.data.delay.seconds || 5);
       }
     }
   }, [node]);
 
   const handleSave = () => {
     // Create updated node data
-    const updatedNode = {
-      ...node,
+    const updatedData = {
+      ...node.data,
       name: name || getDefaultNameByType(node.type),
       message: message || ''
     };
 
     // Handle options for options type
-    if (node.type === 'options') {
-      updatedNode.options = options.filter(opt => opt.trim() !== '');
+    if (node.type === 'optionsNode') {
+      updatedData.options = options.filter(opt => opt.trim() !== '');
       
       // Ensure at least one option
-      if (updatedNode.options.length === 0) {
-        updatedNode.options = ['אפשרות 1'];
+      if (updatedData.options.length === 0) {
+        updatedData.options = ['אפשרות 1'];
       }
     }
 
     // Handle delay settings for delay type
-    if (node.type === 'delay') {
-      updatedNode.delay = {
+    if (node.type === 'delayNode') {
+      updatedData.delay = {
         type: delayType,
         seconds: delayType === 'timeout' ? parseInt(delaySeconds) || 5 : 0
       };
     }
 
-    onSave(updatedNode);
+    onSave(updatedData);
   };
 
   const addOption = () => {
@@ -74,10 +78,10 @@ const NodeEditModal = ({ node, onSave, onClose }) => {
   // Helper function to get default name by node type
   const getDefaultNameByType = (type) => {
     switch (type) {
-      case 'welcome': return 'הודעת פתיחה';
-      case 'text': return 'הודעת טקסט';
-      case 'options': return 'אפשרויות בחירה';
-      case 'delay': return 'השהייה';
+      case 'welcomeNode': return 'הודעת פתיחה';
+      case 'textNode': return 'הודעת טקסט';
+      case 'optionsNode': return 'אפשרויות בחירה';
+      case 'delayNode': return 'השהייה';
       default: return 'צומת חדש';
     }
   };
@@ -91,9 +95,6 @@ const NodeEditModal = ({ node, onSave, onClose }) => {
         </div>
         <div className="modal-body">
           <form id="node-edit-form">
-            <input type="hidden" id="edit-node-id" value={node?.id} />
-            <input type="hidden" id="edit-node-type" value={node?.type} />
-            
             <div className="form-group">
               <label htmlFor="node-name">שם הצומת:</label>
               <input 
@@ -116,7 +117,7 @@ const NodeEditModal = ({ node, onSave, onClose }) => {
             </div>
             
             {/* Options fields */}
-            {node?.type === 'options' && (
+            {node?.type === 'optionsNode' && (
               <div id="options-fields">
                 <h4>אפשרויות בחירה:</h4>
                 <p className="hint" style={{ fontSize: '0.85rem', color: 'var(--gray-dark)', marginBottom: '10px' }}>
@@ -156,7 +157,7 @@ const NodeEditModal = ({ node, onSave, onClose }) => {
             )}
             
             {/* Delay fields */}
-            {node?.type === 'delay' && (
+            {node?.type === 'delayNode' && (
               <div id="delay-fields">
                 <div className="form-group">
                   <label htmlFor="delay-type">סוג השהייה:</label>
@@ -187,6 +188,14 @@ const NodeEditModal = ({ node, onSave, onClose }) => {
           </form>
         </div>
         <div className="modal-footer">
+          {node?.type !== 'welcomeNode' && (
+            <button 
+              className="btn btn-danger" 
+              onClick={() => onDelete && onDelete(node.id)}
+            >
+              <i className="fas fa-trash"></i> מחק
+            </button>
+          )}
           <button className="btn btn-outline" onClick={onClose}>ביטול</button>
           <button className="btn btn-primary" id="save-node-btn" onClick={handleSave}>שמירה</button>
         </div>

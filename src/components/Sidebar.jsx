@@ -1,19 +1,16 @@
-// components/Sidebar.jsx
 import React, { useState } from 'react';
 
-const Sidebar = ({ createNode, clearCanvas, chatbotsList, loadChatbotById }) => {
+const Sidebar = ({ clearCanvas, chatbotsList, loadChatbotById }) => {
   const [selectedChatbot, setSelectedChatbot] = useState('');
 
-  const handleDragStart = (e, type) => {
-    console.log('Drag started with type:', type); // שורת לוג
-    e.dataTransfer.setData('text/plain', type);
-    e.dataTransfer.effectAllowed = 'copy'; // הוסף את זה
-    e.currentTarget.classList.add('dragging');
+  const onDragStart = (event, nodeType) => {
+    event.dataTransfer.setData('application/reactflow', nodeType);
+    event.dataTransfer.effectAllowed = 'move';
+    event.currentTarget.classList.add('dragging');
   };
-  
 
-  const handleDragEnd = (e) => {
-    e.currentTarget.classList.remove('dragging');
+  const onDragEnd = (event) => {
+    event.currentTarget.classList.remove('dragging');
   };
 
   const handleLoadChatbot = () => {
@@ -29,8 +26,8 @@ const Sidebar = ({ createNode, clearCanvas, chatbotsList, loadChatbotById }) => 
       <div 
         className="element-item" 
         draggable 
-        onDragStart={(e) => handleDragStart(e, 'welcome')}
-        onDragEnd={handleDragEnd}
+        onDragStart={(e) => onDragStart(e, 'welcomeNode')}
+        onDragEnd={onDragEnd}
         data-type="welcome"
       >
         <div className="element-icon">
@@ -45,8 +42,8 @@ const Sidebar = ({ createNode, clearCanvas, chatbotsList, loadChatbotById }) => 
       <div 
         className="element-item" 
         draggable 
-        onDragStart={(e) => handleDragStart(e, 'text')}
-        onDragEnd={handleDragEnd}
+        onDragStart={(e) => onDragStart(e, 'textNode')}
+        onDragEnd={onDragEnd}
         data-type="text"
       >
         <div className="element-icon">
@@ -61,8 +58,8 @@ const Sidebar = ({ createNode, clearCanvas, chatbotsList, loadChatbotById }) => 
       <div 
         className="element-item" 
         draggable 
-        onDragStart={(e) => handleDragStart(e, 'options')}
-        onDragEnd={handleDragEnd}
+        onDragStart={(e) => onDragStart(e, 'optionsNode')}
+        onDragEnd={onDragEnd}
         data-type="options"
       >
         <div className="element-icon">
@@ -77,8 +74,8 @@ const Sidebar = ({ createNode, clearCanvas, chatbotsList, loadChatbotById }) => 
       <div 
         className="element-item" 
         draggable 
-        onDragStart={(e) => handleDragStart(e, 'delay')}
-        onDragEnd={handleDragEnd}
+        onDragStart={(e) => onDragStart(e, 'delayNode')}
+        onDragEnd={onDragEnd}
         data-type="delay"
       >
         <div className="element-icon">
@@ -121,6 +118,7 @@ const Sidebar = ({ createNode, clearCanvas, chatbotsList, loadChatbotById }) => 
               onClick={handleLoadChatbot}
               className="btn btn-outline" 
               style={{ width: '100%' }}
+              disabled={!selectedChatbot}
             >
               <i className="fas fa-folder-open"></i> טען צ'אטבוט
             </button>

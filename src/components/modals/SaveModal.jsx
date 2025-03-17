@@ -1,4 +1,3 @@
-// components/modals/SaveModal.jsx
 import React, { useState, useEffect } from 'react';
 
 const SaveModal = ({ chatbotData, onSave, onClose }) => {
@@ -58,12 +57,6 @@ const SaveModal = ({ chatbotData, onSave, onClose }) => {
         </div>
         <div className="modal-body">
           <form id="save-form">
-            <input 
-              type="hidden" 
-              id="chatbot-id" 
-              value={chatbotData?.id || ''} 
-            />
-            
             <div className="form-group">
               <label htmlFor="chatbot-name">שם הצ'אטבוט:</label>
               <input 

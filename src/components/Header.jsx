@@ -1,4 +1,3 @@
-// components/Header.jsx
 import React from 'react';
 
 const Header = ({ isConnected, openPreviewModal, openConnectModal, openSaveModal, chatbotName }) => {

@@ -1,4 +1,4 @@
-// components/Canvas.jsx
+// components/Canvas.jsx - A more direct approach
 import React, { useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import Node from './Node';
 
@@ -17,34 +17,29 @@ const Canvas = forwardRef(({
   getConnectionColor,
   updateConnections,
   chatbotTitle,
-  createNode  // הפרופ שמקבלים
+  createNode,
+  updateNodePosition
 }, ref) => {
   const canvasRef = useRef(null);
   const connectionsRef = useRef([]);
 
   // Forward the canvas ref to parent
-  useImperativeHandle(ref, () => canvasRef.current);
+  useImperativeHandle(ref, () => ({
+    drawConnections
+  }));
 
-  // Set up drag and drop handlers
+  // Set up drag and drop handlers for new nodes
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-  
+
     const handleDragOver = (e) => {
-      e.preventDefault(); // חשוב מאוד!
-      e.stopPropagation();
-      // הוסף שורת לוג לצורך בדיקה
-      console.log('Dragging over canvas');
+      e.preventDefault();
     };
-  
+
     const handleDrop = (e) => {
       e.preventDefault();
-      e.stopPropagation();
-      
-      console.log('Drop event fired'); // שורת לוג לצורך בדיקה
-      
       const nodeType = e.dataTransfer.getData('text/plain');
-      console.log('Node type:', nodeType); // בדוק שהמידע מועבר
       
       // Prevent adding more than one welcome node
       if (nodeType === 'welcome' && document.querySelector('.node.welcome')) {
@@ -57,25 +52,28 @@ const Canvas = forwardRef(({
       const x = (e.clientX - rect.left + canvas.scrollLeft) / scale;
       const y = (e.clientY - rect.top + canvas.scrollTop) / scale;
       
-      console.log('Position:', x, y); // בדוק את המיקום
-      
-      // Call the parent's createNode function
+      // Call the createNode function from props
       createNode(nodeType, x, y);
     };
-  
+
     canvas.addEventListener('dragover', handleDragOver);
     canvas.addEventListener('drop', handleDrop);
-  
+
     return () => {
       canvas.removeEventListener('dragover', handleDragOver);
       canvas.removeEventListener('drop', handleDrop);
     };
-  }, [scale, createNode]); // הוספת createNode לתלויות
-  
+  }, [scale, createNode]);
 
-  // Update connections whenever nodes change
+  // Update connections whenever nodes change or scale changes
   useEffect(() => {
-    drawConnections();
+    console.log("Nodes updated, redrawing connections");
+    // Use a timeout to ensure nodes are rendered before drawing connections
+    const timer = setTimeout(() => {
+      drawConnections();
+    }, 100);
+    
+    return () => clearTimeout(timer);
   }, [nodes, scale]);
 
   // Handle window resize
@@ -90,159 +88,194 @@ const Canvas = forwardRef(({
     };
   }, []);
 
-  // Draw all connections between nodes
-  // בקובץ Canvas.jsx, שפר את פונקציית drawConnections
-const drawConnections = () => {
-  console.log('מצייר חיבורים...');
-  
-  // הסר את כל החיבורים הקיימים
-  connectionsRef.current.forEach(conn => {
-    if (conn && conn.parentNode) {
-      conn.parentNode.removeChild(conn);
-    }
-  });
-  connectionsRef.current = [];
+  // Set up listeners for node movement
+  useEffect(() => {
+    const handleNodeMoved = (e) => {
+      if (updateNodePosition) {
+        updateNodePosition(e.detail.nodeId, e.detail.x, e.detail.y);
+      }
+      setTimeout(() => drawConnections(), 50);
+    };
 
-  // קבל את הקנבס
-  const canvas = canvasRef.current;
-  if (!canvas) return;
-  
-  // בדוק אם יש נודים וחיבורים
-  console.log('נודים לציור חיבורים:', nodes);
-  
-  // צור חיבורים חדשים
-  Object.keys(nodes).forEach(nodeId => {
-    const node = nodes[nodeId];
-    console.log('בודק חיבורים לנוד:', nodeId, node);
+    document.addEventListener('node-moved', handleNodeMoved);
+    return () => {
+      document.removeEventListener('node-moved', handleNodeMoved);
+    };
+  }, [updateNodePosition]);
+
+  // Draw all connections between nodes
+  const drawConnections = () => {
+    console.log("Drawing connections");
     
-    if (node.connections && node.connections.length > 0) {
-      node.connections.forEach(connection => {
-        console.log('מצייר חיבור:', connection);
-        drawConnection(connection);
-      });
+    // Remove all existing connections
+    connectionsRef.current.forEach(conn => {
+      if (conn && conn.parentNode) {
+        conn.parentNode.removeChild(conn);
+      }
+    });
+    connectionsRef.current = [];
+
+    // Get canvas element
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      console.log("Canvas ref is null");
+      return;
     }
-  });
-};
+
+    // Create new connections
+    Object.keys(nodes).forEach(nodeId => {
+      const node = nodes[nodeId];
+      if (node.connections && node.connections.length > 0) {
+        node.connections.forEach(connection => {
+          try {
+            drawConnection(connection);
+          } catch (error) {
+            console.error("Error drawing connection:", error);
+          }
+        });
+      }
+    });
+  };
 
   // Draw a single connection
-  // בקובץ Canvas.jsx, שפר את פונקציית drawConnection
-const drawConnection = (connection) => {
-  console.log('מצייר חיבור בין', connection.source, 'ל-', connection.target);
-  
-  const sourceNode = document.getElementById(connection.source);
-  const targetNode = document.getElementById(connection.target);
+  const drawConnection = (connection) => {
+    const sourceNode = document.getElementById(connection.source);
+    const targetNode = document.getElementById(connection.target);
 
-  if (!sourceNode || !targetNode) {
-    console.error('לא נמצאו נודים:', !sourceNode ? connection.source : connection.target);
-    return;
-  }
+    if (!sourceNode) {
+      console.log(`Source node ${connection.source} not found`);
+      return;
+    }
+    
+    if (!targetNode) {
+      console.log(`Target node ${connection.target} not found`);
+      return;
+    }
 
-  // מצא את המחבר המתאים בנוד המקור
-  const sourceConnectors = sourceNode.querySelectorAll('.connector');
-  if (connection.sourceIndex >= sourceConnectors.length) {
-    console.error('אינדקס מחבר לא תקין:', connection.sourceIndex, 'מתוך', sourceConnectors.length);
-    return;
-  }
-  
-  const sourceConnector = sourceConnectors[connection.sourceIndex];
-  
-  // מצא את המחבר בנוד היעד (או השתמש במרכז הנוד)
-  const targetConnector = targetNode.querySelector('.connector') || targetNode;
+    // Find the appropriate connector in source node
+    const sourceConnectors = sourceNode.querySelectorAll('.connector');
+    if (!sourceConnectors.length) {
+      console.log(`No connectors found in source node ${connection.source}`);
+      return;
+    }
+    
+    if (connection.sourceIndex >= sourceConnectors.length) {
+      console.log(`Source index ${connection.sourceIndex} is out of bounds`);
+      return;
+    }
+    
+    const sourceConnector = sourceConnectors[connection.sourceIndex];
+    
+    // Calculate positions relative to canvas
+    const canvas = canvasRef.current;
+    const canvasRect = canvas.getBoundingClientRect();
 
-  // חשב מיקומים יחסית לקנבס
-  const canvas = canvasRef.current;
-  const canvasRect = canvas.getBoundingClientRect();
+    const sourceRect = sourceConnector.getBoundingClientRect();
+    
+    // Use node center as target point if it has no connectors
+    let targetRect;
+    const targetConnectors = targetNode.querySelectorAll('.connector');
+    if (targetConnectors.length > 0) {
+      targetRect = targetConnectors[0].getBoundingClientRect();
+    } else {
+      // Use node center
+      targetRect = targetNode.getBoundingClientRect();
+      targetRect = {
+        left: targetRect.left + targetRect.width / 2,
+        top: targetRect.top + targetRect.height / 2,
+        width: 0,
+        height: 0
+      };
+    }
 
-  const sourceRect = sourceConnector.getBoundingClientRect();
-  const targetRect = targetConnector.getBoundingClientRect();
+    // Start point - center of source connector
+    const x1 = sourceRect.left + sourceRect.width/2 - canvasRect.left + canvas.scrollLeft;
+    const y1 = sourceRect.top + sourceRect.height/2 - canvasRect.top + canvas.scrollTop;
 
-  // נקודת התחלה - מרכז המחבר המקורי
-  const x1 = sourceRect.left + sourceRect.width/2 - canvasRect.left + canvas.scrollLeft;
-  const y1 = sourceRect.top + sourceRect.height/2 - canvasRect.top + canvas.scrollTop;
+    // End point - center of target connector/node
+    const x2 = targetRect.left + targetRect.width/2 - canvasRect.left + canvas.scrollLeft;
+    const y2 = targetRect.top + targetRect.height/2 - canvasRect.top + canvas.scrollTop;
 
-  // נקודת סיום - מרכז המחבר היעד
-  const x2 = targetRect.left + targetRect.width/2 - canvasRect.left + canvas.scrollLeft;
-  const y2 = targetRect.top + targetRect.height/2 - canvasRect.top + canvas.scrollTop;
+    // Create connection element
+    const connectionEl = document.createElement('div');
+    connectionEl.className = 'connection';
+    connectionEl.style.zIndex = '5'; // Ensure it's below nodes but visible
 
-  console.log('מיקומי חיבור:', {x1, y1, x2, y2});
+    // Create SVG
+    const svgNS = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(svgNS, "svg");
 
-  // צור אלמנט חיבור
-  const connectionEl = document.createElement('div');
-  connectionEl.className = 'connection';
+    // Calculate SVG bounds
+    const minX = Math.min(x1, x2) - 20;
+    const minY = Math.min(y1, y2) - 20;
+    const width = Math.abs(x2 - x1) + 40;
+    const height = Math.abs(y2 - y1) + 40;
 
-  // צור SVG
-  const svgNS = "http://www.w3.org/2000/svg";
-  const svg = document.createElementNS(svgNS, "svg");
+    // Set SVG attributes
+    svg.setAttribute("width", width);
+    svg.setAttribute("height", height);
+    svg.style.position = "absolute";
+    svg.style.left = minX + "px";
+    svg.style.top = minY + "px";
+    svg.style.overflow = "visible";
+    svg.style.pointerEvents = "none"; // Allow clicking through
 
-  // חשב גבולות SVG
-  const minX = Math.min(x1, x2) - 10;
-  const minY = Math.min(y1, y2) - 10;
-  const width = Math.abs(x2 - x1) + 20;
-  const height = Math.abs(y2 - y1) + 20;
+    // Create connection path
+    const path = document.createElementNS(svgNS, "path");
 
-  // הגדר תכונות SVG
-  svg.setAttribute("width", width);
-  svg.setAttribute("height", height);
-  svg.style.position = "absolute";
-  svg.style.left = minX + "px";
-  svg.style.top = minY + "px";
-  svg.style.overflow = "visible";
+    // Calculate control points for curved line
+    const curvature = 0.5;
+    const cpX1 = x1;
+    const cpY1 = y1 + (y2 - y1) * curvature;
+    const cpX2 = x2;
+    const cpY2 = y2 - (y2 - y1) * curvature;
 
-  // צור נתיב חיבור
-  const path = document.createElementNS(svgNS, "path");
+    // Calculate points relative to SVG position
+    const localX1 = x1 - minX;
+    const localY1 = y1 - minY;
+    const localX2 = x2 - minX;
+    const localY2 = y2 - minY;
+    const localCpX1 = cpX1 - minX;
+    const localCpY1 = cpY1 - minY;
+    const localCpX2 = cpX2 - minX;
+    const localCpY2 = cpY2 - minY;
 
-  // חשב נקודות בקרה לקו מעוקל
-  const curvature = 0.5;
-  const cpX1 = x1;
-  const cpY1 = y1 + (y2 - y1) * curvature;
-  const cpX2 = x2;
-  const cpY2 = y2 - (y2 - y1) * curvature;
+    // Define path
+    const d = `M ${localX1} ${localY1} C ${localCpX1} ${localCpY1}, ${localCpX2} ${localCpY2}, ${localX2} ${localY2}`;
+    path.setAttribute("d", d);
+    path.setAttribute("fill", "none");
+    path.setAttribute("stroke", getConnectionColor(connection.source));
+    path.setAttribute("stroke-width", "2");
 
-  // חשב נקודות יחסית למיקום ה-SVG
-  const localX1 = x1 - minX;
-  const localY1 = y1 - minY;
-  const localX2 = x2 - minX;
-  const localY2 = y2 - minY;
-  const localCpX1 = cpX1 - minX;
-  const localCpY1 = cpY1 - minY;
-  const localCpX2 = cpX2 - minX;
-  const localCpY2 = cpY2 - minY;
+    // Add arrow
+    const arrow = document.createElementNS(svgNS, "polygon");
 
-  // הגדר נתיב
-  const d = `M ${localX1} ${localY1} C ${localCpX1} ${localCpY1}, ${localCpX2} ${localCpY2}, ${localX2} ${localY2}`;
-  path.setAttribute("d", d);
-  path.setAttribute("fill", "none");
-  path.setAttribute("stroke", getConnectionColor(connection.source));
-  path.setAttribute("stroke-width", "2");
+    // Calculate arrow angle
+    const angle = Math.atan2(localY2 - localCpY2, localX2 - localCpX2);
+    const size = 8;
 
-  // הוסף חץ
-  const arrow = document.createElementNS(svgNS, "polygon");
+    // Calculate arrow points
+    const arrowPoints = [
+      localX2, localY2,
+      localX2 - size * Math.cos(angle - Math.PI / 6), localY2 - size * Math.sin(angle - Math.PI / 6),
+      localX2 - size * Math.cos(angle + Math.PI / 6), localY2 - size * Math.sin(angle + Math.PI / 6)
+    ];
 
-  // חשב זווית החץ
-  const angle = Math.atan2(localY2 - localCpY2, localX2 - localCpX2);
-  const size = 8;
+    arrow.setAttribute("points", arrowPoints.join(","));
+    arrow.setAttribute("fill", getConnectionColor(connection.source));
 
-  // חשב נקודות החץ
-  const arrowPoints = [
-    localX2, localY2,
-    localX2 - size * Math.cos(angle - Math.PI / 6), localY2 - size * Math.sin(angle - Math.PI / 6),
-    localX2 - size * Math.cos(angle + Math.PI / 6), localY2 - size * Math.sin(angle + Math.PI / 6)
-  ];
+    // Add elements to SVG
+    svg.appendChild(path);
+    svg.appendChild(arrow);
+    connectionEl.appendChild(svg);
 
-  arrow.setAttribute("points", arrowPoints.join(","));
-  arrow.setAttribute("fill", getConnectionColor(connection.source));
+    // Add connection to canvas
+    canvas.appendChild(connectionEl);
+    connectionsRef.current.push(connectionEl);
+    
+    console.log(`Connection drawn from ${connection.source} to ${connection.target}`);
+  };
 
-  // הוסף אלמנטים ל-SVG
-  svg.appendChild(path);
-  svg.appendChild(arrow);
-  connectionEl.appendChild(svg);
-
-  // הוסף חיבור לקנבס
-  canvas.appendChild(connectionEl);
-  connectionsRef.current.push(connectionEl);
-  
-  console.log('חיבור נוצר בהצלחה');
-};
   return (
     <div className="canvas-container">
       <div className="canvas-header">

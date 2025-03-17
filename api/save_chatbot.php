@@ -17,13 +17,17 @@ if (json_last_error() !== JSON_ERROR_NONE) {
     sendJsonResponse(['success' => false, 'error' => 'Invalid JSON data']);
 }
 
+// Add detailed logging
+error_log('Received data structure: ' . print_r($chatbotData, true));
+
 // Validate required fields
 if (empty($chatbotData['name'])) {
     sendJsonResponse(['success' => false, 'error' => 'Name is required']);
 }
 
-// Check if nodes exist
-if (empty($chatbotData['nodes'])) {
+// Check if nodes exist - now looking in the flow structure
+if (empty($chatbotData['flow']) || empty($chatbotData['flow']['nodes'])) {
+    error_log('Nodes missing. Data structure: ' . print_r($chatbotData, true));
     sendJsonResponse(['success' => false, 'error' => 'No nodes to save']);
 }
 
@@ -33,7 +37,9 @@ try {
     // Prepare the data for storage
     $name = $conn->real_escape_string($chatbotData['name']);
     $description = $conn->real_escape_string($chatbotData['description'] ?? '');
-    $data = $conn->real_escape_string(json_encode($chatbotData['nodes']));
+    
+    // Store the entire flow data (nodes and edges)
+    $data = $conn->real_escape_string(json_encode($chatbotData['flow']));
     
     // Check if we're updating an existing chatbot or creating a new one
     if (isset($chatbotData['id']) && !empty($chatbotData['id'])) {
@@ -64,4 +70,5 @@ try {
         $conn->close();
     }
 }
+
 ?>

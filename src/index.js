@@ -1,11 +1,11 @@
-// index.js
+// index.js - Entry point for the new Flow Builder application
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './App';
+import FlowBuilder from './App';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
-    <App />
+    <FlowBuilder />
   </React.StrictMode>
 );
