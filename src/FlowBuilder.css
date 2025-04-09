@@ -302,7 +302,9 @@
     border-radius: 4px;
     display: flex;
     align-items: center;
-    gap: 5px;
+    position: relative;  /* חשוב להוסיף כדי שה-handles יהיו ממוקמים יחסית לאפשרות */
+    margin-bottom: 5px; 
+    gap:5px
   }
   
   .option-number {
@@ -820,3 +822,54 @@
     background-image: radial-gradient(#e0e0e0 1px, transparent 1px);
     background-size: 25px 25px;
   }
+
+
+  /* Add these styles to your existing FlowBuilder.css file */
+/* Add these styles to your existing FlowBuilder.css file */
+/* הוסף רק את הסגנונות האלה לקובץ CSS שלך */
+
+/* סגנונות בסיסיים לקצוות במצבים שונים */
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: #ff6b6b !important;
+  stroke-width: 3px !important;
+}
+
+.react-flow__edge:hover .react-flow__edge-path {
+  stroke: #61dafb !important;
+  stroke-width: 3px !important;
+}
+
+/* סגנון כפתור המחיקה */
+.edgebutton-delete {
+  background-color: white;
+  color: #ff6b6b;
+  border: 1.5px solid #ff6b6b;
+  border-radius: 12px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: bold;
+  min-width: 50px;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+  transition: background-color 0.2s ease, color 0.2s ease;
+  z-index: 1000;
+}
+
+.edgebutton-delete:hover {
+  background-color: #ff6b6b;
+  color: white;
+}
+
+/* סגנונות ידיות החיבור */
+.react-flow__handle {
+  width: 8px;
+  height: 8px;
+  background-color: white;
+  border: 2px solid #25D366;
+}
+
+.react-flow__handle:hover {
+  transform: scale(1.3);
+}
+
+

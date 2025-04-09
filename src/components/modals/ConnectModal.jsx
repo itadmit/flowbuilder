@@ -9,6 +9,8 @@ const ConnectModal = ({ onConnect, onClose }) => {
   const [connectionResult, setConnectionResult] = useState({ success: false, message: '' });
   const [checkInterval, setCheckIntervalId] = useState(null);
 
+  console.log("ConnectModal loaded - updated with full API support"); 
+
   // Load saved settings when modal opens
   useEffect(() => {
     fetch('api/get_whatsapp_settings.php')
@@ -17,6 +19,7 @@ const ConnectModal = ({ onConnect, onClose }) => {
         if (data.success && data.settings) {
           setApiKey(data.settings.api_key || '');
           setPhoneNumber(data.settings.phone_number || '');
+          console.log("Loaded settings from server");
         }
       })
       .catch(error => {
@@ -36,38 +39,86 @@ const ConnectModal = ({ onConnect, onClose }) => {
       alert('יש להזין מפתח API תקין');
       return;
     }
-
+  
     if (!phoneNumber) {
       alert('יש להזין מספר טלפון תקין');
       return;
     }
-
+  
     setConnecting(true);
-    setConnectionResult({ success: false, message: '' });
-
+    setConnectionResult({ success: false, message: 'בודק את החיבור...' });
+    
+    console.log("Connecting with API key:", apiKey.substring(0, 10) + "...");
+  
     try {
-      const result = await onConnect(apiKey, phoneNumber);
-
-      if (result.success) {
-        if (result.status === 'qr_ready') {
-          // QR code is ready, load it
-          loadQrCode(apiKey);
-        } else if (result.status === 'connected') {
-          // Already connected
-          setConnectionResult({
-            success: true,
-            message: 'החיבור הצליח! הצ\'אטבוט שלך מוכן לשימוש.'
+      // בדיקת סטטוס
+      const statusResponse = await fetch('https://rappelsend.co.il/api/status', {
+        method: 'GET',
+        headers: {
+          'X-API-Key': apiKey
+        }
+      });
+      
+      const statusData = await statusResponse.json();
+      console.log("Status check response:", statusData);
+      
+      if (statusData.success) {
+        // יש חיבור קיים
+        setConnectionResult({
+          success: true,
+          message: `החיבור קיים בסטטוס: ${statusData.status}`
+        });
+        
+        // עדכון מקומי
+        updateLocalSettings(apiKey, phoneNumber);
+      } else if (statusData.error === 'Connection not found') {
+        // אין חיבור - ניסיון לשלוח הודעה ישירה כדי לבדוק אם עובד בכל זאת
+        console.log("No connection found, trying to send a message anyway");
+        
+        try {
+          const sendResponse = await fetch('https://rappelsend.co.il/api/send-message', {
+            method: 'POST',
+            headers: {
+              'X-API-Key': apiKey,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              phone: phoneNumber,
+              message: "בדיקת חיבור"
+            })
           });
-        } else {
+          
+          const sendData = await sendResponse.json();
+          console.log("Send message response:", sendData);
+          
+          if (sendData.success) {
+            // אם שליחת ההודעה עובדת, החיבור קיים אבל לא מופיע בנתיב /status
+            setConnectionResult({
+              success: true,
+              message: `החיבור פעיל! הודעת בדיקה נשלחה בהצלחה.`
+            });
+            
+            // עדכון מקומי
+            updateLocalSettings(apiKey, phoneNumber);
+          } else {
+            // אין חיבור כלל
+            setConnectionResult({
+              success: false,
+              message: `לא נמצא חיבור עם מפתח API זה. נא ליצור חיבור במערכת RappelSend.`
+            });
+          }
+        } catch (sendError) {
+          console.error("Error sending test message:", sendError);
           setConnectionResult({
-            success: true,
-            message: `סטטוס החיבור: ${result.status}`
+            success: false,
+            message: `שגיאה בבדיקת החיבור. נא ליצור חיבור במערכת RappelSend.`
           });
         }
       } else {
+        // שגיאה אחרת
         setConnectionResult({
           success: false,
-          message: result.error || 'לא ניתן להתחבר'
+          message: statusData.error || 'שגיאה לא ידועה'
         });
       }
     } catch (error) {
@@ -81,55 +132,20 @@ const ConnectModal = ({ onConnect, onClose }) => {
     }
   };
 
-  const loadQrCode = (apiKey) => {
-    fetch(`api/whatsapp_qr.php?api_key=${encodeURIComponent(apiKey)}`)
-      .then(response => response.json())
-      .then(data => {
-        if (data.success && data.qr_code) {
-          setQrCode(data.qr_code);
-          setShowQR(true);
-
-          // Start interval to check connection status
-          const intervalId = setInterval(() => {
-            checkConnectionStatus(apiKey);
-          }, 3000);
-
-          setCheckIntervalId(intervalId);
-        } else {
-          setConnectionResult({
-            success: false,
-            message: `שגיאה בטעינת קוד QR: ${data.error || 'לא ניתן לקבל קוד'}`
-          });
-        }
-      })
-      .catch(error => {
-        console.error('QR code loading error:', error);
-        setConnectionResult({
-          success: false,
-          message: 'שגיאה בטעינת קוד QR'
-        });
+  const updateLocalSettings = async (apiKey, phoneNumber) => {
+    try {
+      const formData = new FormData();
+      formData.append('api_key', apiKey);
+      formData.append('phone_number', phoneNumber);
+      
+      await fetch('/api/whatsapp_connect.php', {
+        method: 'POST',
+        body: formData
       });
-  };
-
-  const checkConnectionStatus = (apiKey) => {
-    fetch(`api/check_connection.php?api_key=${encodeURIComponent(apiKey)}`)
-      .then(response => response.json())
-      .then(statusData => {
-        if (statusData.success && statusData.connected) {
-          if (checkInterval) {
-            clearInterval(checkInterval);
-            setCheckIntervalId(null);
-          }
-
-          setConnectionResult({
-            success: true,
-            message: 'החיבור הצליח! הצ\'אטבוט שלך מוכן לשימוש.'
-          });
-        }
-      })
-      .catch(error => {
-        console.error('Error checking connection status:', error);
-      });
+      console.log("Updated local database");
+    } catch (error) {
+      console.error("Error updating local settings:", error);
+    }
   };
 
   // Clean up interval when component unmounts
@@ -174,14 +190,6 @@ const ConnectModal = ({ onConnect, onClose }) => {
                 יש להזין מספר עם קידומת מדינה, ללא מקפים או רווחים
               </small>
             </div>
-            
-            {showQR && (
-              <div id="qr-container" style={{ textAlign: 'center', marginTop: '20px' }}>
-                <p>סרוק את קוד ה-QR באמצעות וואטסאפ בטלפון שלך:</p>
-                <img id="qr-code" src={qrCode} alt="QR Code" style={{ maxWidth: '100%', margin: '15px 0' }} />
-                <p><strong>הוראות:</strong> פתח את וואטסאפ &gt; הגדרות &gt; התקנים מקושרים &gt; קישור התקן</p>
-              </div>
-            )}
             
             {connectionResult.message && (
               <div id="connection-result" style={{ marginTop: '20px' }}>

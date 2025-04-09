@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import ReactFlow, { 
   Background, 
   Controls, 
@@ -13,6 +13,7 @@ import TextNodeComponent from './components/nodes/TextNode';
 import OptionsNodeComponent from './components/nodes/OptionsNode';
 import WelcomeNodeComponent from './components/nodes/WelcomeNode';
 import DelayNodeComponent from './components/nodes/DelayNode';
+import CustomEdge from './components/CustomEdge';
 
 import Sidebar from './components/Sidebar';
 import NodeEditModal from './components/modals/NodeEditModal';
@@ -31,6 +32,11 @@ const nodeTypes = {
   delayNode: DelayNodeComponent,
 };
 
+// Register custom edge types
+const edgeTypes = {
+  custom: CustomEdge,
+};
+
 const FlowBuilder = () => {
   // Flow states
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
@@ -45,6 +51,8 @@ const FlowBuilder = () => {
   
   // Currently selected node
   const [selectedNode, setSelectedNode] = useState(null);
+  // Currently selected edge
+  const [selectedEdge, setSelectedEdge] = useState(null);
   
   // Flow container ref
   const reactFlowWrapper = useRef(null);
@@ -58,16 +66,61 @@ const FlowBuilder = () => {
 
   // Handle connections between nodes
   const onConnect = useCallback((params) => {
-    // Create a custom edge with a label
-    const newEdge = {
-      ...params,
-      animated: true,
-      style: { stroke: '#25D366' },
-      type: 'smoothstep'
-    };
+    console.log('Connecting nodes with params:', params);
     
-    setEdges((eds) => addEdge(newEdge, eds));
+    // Create a unique key for this connection
+    const connectionKey = `${params.source}:${params.sourceHandle || 'default'}->${params.target}:${params.targetHandle || 'default'}`;
+    
+    // Check if a connection already exists
+    setEdges((eds) => {
+      // First remove any duplicate connections that might exist
+      const existingEdges = eds.filter(
+        edge => 
+          !(edge.source === params.source && 
+            edge.target === params.target &&
+            edge.sourceHandle === params.sourceHandle &&
+            edge.targetHandle === params.targetHandle)
+      );
+      
+      // Now add the new edge
+      const newEdge = {
+        ...params,
+        id: `edge-${connectionKey}-${Date.now()}`,
+        animated: true,
+        style: { stroke: '#25D366' },
+        type: 'custom', // Use our custom edge type
+        data: { connectionKey } // Store the connection key for reference
+      };
+      
+      return addEdge(newEdge, existingEdges);
+    });
   }, [setEdges]);
+
+  // Handle edge click
+  const onEdgeClick = (event, edge) => {
+    console.log('Edge clicked:', edge);
+    
+    // Set this edge as selected and deselect any nodes
+    setSelectedEdge(edge.id);
+    setSelectedNode(null);
+    
+    // Prevent node selection if we're clicking on an edge
+    event.stopPropagation();
+  };
+
+  // Handle click on the canvas (deselect elements)
+  const onPaneClick = useCallback((event) => {
+    // Only deselect if clicking directly on the pane (not a node or edge)
+    if (event.target.classList.contains('react-flow__pane')) {
+      setSelectedEdge(null);
+      setSelectedNode(null);
+    }
+  }, []);
+  
+  // Function to check if an edge is selected
+  const isEdgeSelected = useCallback((edge) => {
+    return selectedEdge === edge.id;
+  }, [selectedEdge]);
 
   // Handle drop from sidebar to create a new node
   const onDragOver = useCallback((event) => {
@@ -159,12 +212,16 @@ const FlowBuilder = () => {
   // Handle node selection
   const onNodeClick = (event, node) => {
     setSelectedNode(node);
+    // Deselect any selected edge when a node is clicked
+    setSelectedEdge(null);
   };
 
   // Handle double-click to edit a node
   const onNodeDoubleClick = (event, node) => {
     setSelectedNode(node);
     setShowNodeEdit(true);
+    // Deselect any selected edge when a node is double-clicked
+    setSelectedEdge(null);
   };
 
   // Save node edit
@@ -197,8 +254,81 @@ const FlowBuilder = () => {
       setEdges((eds) => eds.filter(
         (edge) => edge.source !== nodeId && edge.target !== nodeId
       ));
+      
+      // Close the edit modal after deletion
+      setShowNodeEdit(false);
     }
   };
+  
+  // Delete an edge - add as a direct function to pass to the custom edge
+  const deleteEdge = useCallback((edgeId) => {
+    console.log(`מוחק קצה עם מזהה: ${edgeId}`);
+    setEdges((edges) => edges.filter(edge => edge.id !== edgeId));
+    setSelectedEdge(null);
+  }, [setEdges]);
+  
+  // Create a context for the custom edge
+  const edgeContext = useMemo(() => ({
+    deleteEdge
+  }), [deleteEdge]);
+
+  // Helper function to check and fix edges after node changes
+  const checkAndFixEdges = useCallback(() => {
+    // Create a Map to store unique connections
+    const uniqueConnections = new Map();
+    const edgesToKeep = [];
+    const duplicateEdges = [];
+    
+    // Process all edges
+    edges.forEach(edge => {
+      // Create a unique identifier for this connection
+      const connectionKey = `${edge.source}:${edge.sourceHandle || 'default'}->${edge.target}:${edge.targetHandle || 'default'}`;
+      
+      if (!uniqueConnections.has(connectionKey)) {
+        // This is the first occurrence of this connection
+        uniqueConnections.set(connectionKey, edge.id);
+        edgesToKeep.push(edge);
+      } else {
+        // This is a duplicate connection
+        duplicateEdges.push(edge);
+      }
+    });
+    
+    // If duplicates found, update the edges state
+    if (duplicateEdges.length > 0) {
+      console.log(`Found ${duplicateEdges.length} duplicate edges. Removing:`, duplicateEdges);
+      setEdges(edgesToKeep);
+    }
+  }, [edges, setEdges]);
+  
+  // Run edge check whenever edges change
+  useEffect(() => {
+    checkAndFixEdges();
+  }, [edges, checkAndFixEdges]);
+  
+  // Handle keyboard events for deleting nodes and edges
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === 'Delete') {
+        if (selectedEdge) {
+          deleteEdge(selectedEdge);
+        } else if (selectedNode && selectedNode.type !== 'welcomeNode') {
+          deleteNode(selectedNode.id);
+        }
+      }
+    };
+  
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [selectedNode, selectedEdge, deleteEdge, deleteNode]);
+  // Make sure to add selectedNode to your state variables
+  
+  // Run edge check whenever edges change
+  useEffect(() => {
+    checkAndFixEdges();
+  }, [edges, checkAndFixEdges]);
 
   // Clear the canvas
   const clearCanvas = () => {
@@ -337,8 +467,16 @@ const FlowBuilder = () => {
   // Load chatbot data from server
   const loadChatbotData = (data) => {
     if (data.flow) {
+      // Update edge types to use custom edge type
+      const updatedEdges = data.flow.edges.map(edge => ({
+        ...edge,
+        type: 'custom',
+        animated: true,
+        style: { stroke: '#25D366' }
+      }));
+      
       setNodes(data.flow.nodes || []);
-      setEdges(data.flow.edges || []);
+      setEdges(updatedEdges || []);
       setChatbotData(data);
     }
   };
@@ -467,12 +605,26 @@ const FlowBuilder = () => {
               onDragOver={onDragOver}
               onNodeClick={onNodeClick}
               onNodeDoubleClick={onNodeDoubleClick}
+              onEdgeClick={onEdgeClick}
+              onPaneClick={onPaneClick}
               nodeTypes={nodeTypes}
+              edgeTypes={edgeTypes}
               fitView={{ padding: 0.3 }}
               snapToGrid
               snapGrid={[15, 15]}
               defaultViewport={{ x: 0, y: 0, zoom: 0.6 }}
               attributionPosition="bottom-left"
+              edgesUpdatable={true}
+              edgesFocusable={true}
+              elementsSelectable={true}
+              isEdgeSelected={isEdgeSelected}
+              deleteKeyCode="Delete"
+              multiSelectionKeyCode="Control"
+              defaultEdgeOptions={{
+                type: 'custom',
+                animated: true,
+                data: { context: edgeContext }
+              }}
             >
               <Background color="#f5f5f5" gap={16} size={1} />
               <Controls />
